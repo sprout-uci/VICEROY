@@ -1,0 +1,57 @@
+<html>
+<head>
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/bootstrap-treeview.min.css">
+    <style type="text/css">
+        #radioBtn .notActive{
+            color: #3276b1;
+            background-color: #fff;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="row">
+            <div class="col-lg-7 mx-auto">
+                <div class="card border-0 mb-5">
+                    <div class="card-body p-3">
+                        <img src="icon.png">
+                        <h2 class="h6 mb-1">GDPR/CCPA Verifiable Consumer Request</h2>
+                        <p class="small text-muted font-italic mb-4">Website Visit History</p>
+                        <!-- Holds VCR list -->
+                        <div id="tree"></div>
+                        <div class="row form-group">
+                            <div class="col-sm-7 col-md-7">
+                                <div class="input-group">
+                                    <div id="radioBtn" class="btn-group">
+                                        <a class="btn btn-success active" data-toggle="requestType" data-title="access">ACCESS</a>
+                                        <a class="btn btn-primary notActive" data-toggle="requestType" data-title="modify">MODIFY</a>
+                                        <a class="btn btn-danger notActive" data-toggle="requestType" data-title="delete">DELETE</a>
+                                    </div>
+                                    <input type="hidden" name="requestType" id="requestType">
+                                    &nbsp;&nbsp;
+                                    <button type="button" class="btn btn-light border" id="sendRequestButton">Send Request</button>
+                                    <br><br>
+                                    <p class="small text-muted font-italix mb-4">Server Response:</p>
+                                    <textarea rows="4" cols="50" readonly id="serverResponseTextArea"></textarea>
+                                </div>
+                            </div>
+                        </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/jquery.js"></script>
+    <script src="js/popper.js"></script>
+    <script src="js/bootstrap.min.js"></script>
+    <script src="js/bootstrap-treeview.min.js"></script>
+    <script src="js/etc.js"></script>
+    <!-- JS logic for popup -->
+    <script src="popup.js"></script>
+    <!-- Debug logic -->
+    <script src="../debug.js"></script>
+    <!-- keyMap Datastructure -->
+    <script src="../keyMap.js"></script>
+</body>
+</html>

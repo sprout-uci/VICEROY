@@ -1,0 +1,6 @@
+ecdsa
+intelhex
+pyserial
+solo-python
+pyusb
+wheel

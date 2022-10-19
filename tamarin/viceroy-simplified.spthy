@@ -1,0 +1,123 @@
+theory VICEROY
+begin
+
+builtins: signing
+
+/*
+   Protocol:    The Viceroy protocol
+   Modeler:     Anonymous
+   Date:        August 2022
+   Source:      Modeled based on the implemented protocol.
+   Status:      working
+ */
+
+
+// Public key infrastructure
+rule Register_pk:
+  [ Fr(~ltkA) ]
+  -->
+  [ !Ltk($A, ~ltkA), !Pk($A, pk(~ltkA)), Out(pk(~ltkA)) ]
+
+rule Reveal_ltk:
+  [ !Ltk(A, ltkA) ] --[ RevLtk(A) ]-> [ Out(ltkA) ]
+
+
+/* We formalize the following protocol
+
+Consumer device (C)
+Trusted device (T)
+Web server (S)
+
+Trusted device generates master private key sk(C) and sends the device public key pk(C) to the user's device
+0. T -> C: pk(C)
+
+When interacting with a website, the user's device derives a fresh VCR public key from the device public key and sends it to the server.
+1. C -> S: pk(C)
+
+The server returns a cookie and a cookie wrapper, which is a signature over the cookie and the provided VCR public key.
+2. S -> C: Cookie, {pk(C), Cookie}sk(S)
+
+When issuing a VCR, the user signs the request using the corresponding private key on their trusted device, and then sends the request and signature along with the associated cookie and cookie wrapper to the server.
+3. T -> C: {request}sk(U)
+4. C -> S: {request}sk(U), {pk(U), Cookie}sk(S), Cookie
+
+Having authenticated the consumer device, the server can perform the requested operation e.g. sending the data to the consumer, or modifying or deleting the data.
+
+*/
+
+rule C_1:
+    [ !Pk($C, pkC), !Pk($S, pkS) ]
+  --[ Request_wrapper($C, <pkC>) ]->
+    [ Out( pkC ), State_C_1($C, pkC, $S, pkS) ]
+
+
+rule S_1:
+  let m2 = <~cookie, sign(<~cookie, pkC>, ltkS)>
+  in
+    [ !Ltk($S, ltkS), !Pk($C, pkC), In( pkC ), Fr(~cookie) ]
+  --[ Issue_wrapper($S, $C, <~cookie>) ]->
+    [ Out( m2 ), State_S_1($S, $C, pkC, ~cookie) ]
+
+
+rule C_2:
+  let m2 = <cookie, server_sig>
+      m3 = <cookie, ~request, server_sig, sign(<cookie, ~request, pkS>, ltkC)>
+  in
+    [ State_C_1($C, pkC, $S, pkS), !Ltk($C, ltkC), In( m2 ), Fr(~request) ]
+  --[ Eq( verify(server_sig, <cookie, pkC>, pkS), true )
+    , Issue_VCR($C, $S, <cookie, ~request>) ]->
+    [ Out( m3 ) ]
+
+
+rule S_2:
+  let m3 = <cookie, request, server_sig, client_sig>
+  in
+    [ State_S_1($S, $C, pkC, cookie), In( m3 ), !Pk($S, pkS) ]
+  --[ Eq( verify(server_sig, <cookie, pkC>, pkS), true )
+    , Eq( verify(client_sig, <cookie, request, pkS>, pkC), true )
+    , Accept_VCR($S, $C, <cookie, request>) ]->
+    [  ]
+
+
+restriction Equality:
+  "All x y #i. Eq(x,y) @i ==> x = y"
+
+
+
+/* Unforgeability: only the client who originally interacted with the server can create a valid VCR. Specifically, whenever the server accepts a VCR from a client, then that server had previously issued a cookie wrapper to that client for the same cookie, or the adversary performed a long-term key reveal on the server or client */
+lemma unforgeability:
+  " All server client cookie request #i.
+        Accept_VCR(server, client, <cookie, request>) @ i
+      ==>
+          (Ex #j. Issue_wrapper(server, client, <cookie>) @ j & j < i)
+        | (Ex #r. RevLtk(server) @ r)
+        | (Ex #r. RevLtk(client) @ r)
+  "
+
+
+
+/* Injective agreement from the perspective of both the client and the server. Whenever the server accepts a VCR, then the client with the corresponding private key issued that VCR, and there is no other server that accepted a VCR for the same cookie, or the adversary performed a long-term key reveal on the server or client */
+lemma injective_agree:
+  " All server client cookie request #i.
+        Accept_VCR(server, client, <cookie, request>) @ i
+      ==>
+          (Ex #j. Issue_VCR(client, server, <cookie, request>) @ j & j < i
+            & not(Ex server2 client2 #i2.
+                    Accept_VCR(server2, client2, <cookie, request>) @ i2 & not(#i = #i2)
+                 )
+          )
+        | (Ex #r. RevLtk(server) @ r)
+        | (Ex #r. RevLtk(client) @ r)
+  "
+
+
+/* Consistency check: ensure that a server can accept a VCR without the adversary having performed a long-term key reveal on the server or client. */
+lemma accept_vcr_possible:
+  exists-trace
+  " Ex server client params #i.
+      Accept_VCR(server, client, params) @ i
+    & not (Ex #r. RevLtk(server) @ r)
+    & not (Ex #r. RevLtk(client) @ r)
+  "
+
+end

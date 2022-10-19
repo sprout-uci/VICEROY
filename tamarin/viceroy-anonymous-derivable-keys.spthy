@@ -1,0 +1,133 @@
+theory VICEROY
+begin
+
+builtins: signing, hashing
+
+
+// Public key infrastructure
+rule Register_pk:
+  [ Fr(~skA) ]
+  --[Unique($A)]->
+  [ !Sk($A, ~skA), !Pk($A, pk(~skA)), Out(pk(~skA)) ]
+
+rule Reveal_sk:
+  [ !Sk(A, skA) ] --[ RevSk(A) ]-> [ Out(skA) ]
+
+
+// Derivable asymmetric keys
+rule Register_derived_key:
+  [ !Sk($A, skA), Fr(~dskA) ]
+  -->
+  [ !Dsk($A, ~dskA), !Dpk($A, pk(~dskA)), Out(pk(~dskA)) ]
+
+rule Reveal_dsk:
+  [ !Dsk(A, dskA) ] --[ RevDsk(A) ]-> [ Out(dskA) ]
+
+
+/* We formalize the following protocol
+
+Trusted device (T)  |  Client device (C)  |  Web server (S)
+
+[Optionally] The trusted device generates master private key sk(t) and sends the device public key pk(t/i) to the client's device [not included in this model since it is not mandatory to use a separate trusted device].
+
+When the client begins interacting with a website, the website issues the client with a cookie.
+0. S -> C: cookie
+
+The client derives a fresh VCR public key pk(t/i/j) from the device public key and sends it to the server along with the cookie.
+1. C -> S: cookie, pk(t/i/j) 
+
+The server returns a cookie wrapper, which is a signature over the cookie and the provided VCR public key.
+2. S -> C: sign_{sk(S)}{h(cookie, pk(t/i/j))}
+
+When issuing a VCR, the user signs the request and cookie using the corresponding private key on their trusted device [not included in this model], and then sends the cookie, request, public key, wrapper, and signature to the server.
+3. C -> S: cookie, request, pk(t/i), sign_{sk(S)}{h(cookie, pk(t/i/j))}, sign_{sk(t/i/j)}{h(request, cookie)}
+
+If all the signatures can be verified, the server accepts the VCR and performs the requested operation. */
+
+rule S_0:
+    [ Fr(~cookie) ]
+  --[  ]->
+    [ Out( ~cookie ), !State_S_0($S, ~cookie) ]
+
+rule C_1:
+  let dpkC = pk(~dskC)
+      m1 = <cookie, dpkC>
+  in
+    [ In(cookie), Fr(~dskC) ]
+  --[ Request_wrapper( dpkC ) ]->
+    [ Out( m1 ), State_C_1(~dskC, dpkC, cookie) ]
+
+rule S_1:
+  let m1 = <cookie, dpkC>
+      m2 = sign(h(<cookie, dpkC>), skS)
+  in
+    [ !State_S_0($S, cookie), !Pk($S, pkS), !Sk($S, skS), In( m1 ) ]
+  --[ Issue_wrapper($S, dpkC, <cookie>) ]->
+    [ Out( m2 ), !State_S_1($S, pkS) ]
+
+rule C_2:
+  let request = <'op', ~nonce, pkS>
+      m3 = <cookie, request, dpkC, wrapper, sign( h(<request, cookie>), dskC ) >
+  in
+    [ State_C_1(dskC, dpkC, cookie), !Pk($S, pkS), In(wrapper), Fr(~nonce) ]
+  --[ Eq( verify(wrapper, h(<cookie, dpkC>), pkS), true )
+    , Issue_VCR(dskC, $S, <cookie, request>) ]->
+    [ Out( m3 ) ]
+
+rule S_2:
+  let request = <'op', nonce, pkS>
+      m3 = <cookie, request, dpkC, wrapper, client_sig>
+  in
+    [ !State_S_1($S, pkS), In( m3 ) ]
+  --[ Eq( verify(wrapper, h(<cookie, dpkC>), pkS), true )
+    , Eq( verify(client_sig, h(<request, cookie>), dpkC), true )
+    , Unique(nonce)
+    , Accept_VCR($S, dpkC, <cookie, request>) ]->
+    [  ]
+
+restriction Equality:
+  "All x y #i. Eq(x,y) @i ==> x = y"
+
+restriction Uniqueness:
+   "All x #i #j. Unique(x) @ i & Unique(x) @ j ==> #i = #j"
+
+/* Wrapper unforgeability: whenever the server accepts a VCR from a client, then that server had previously issued a cookie wrapper to that client for the same cookie, or the adversary performed a long-term key reveal on the server, or the adversary knows the client's derived private key. */
+lemma wrapper_unforgeability:
+  " All server dskC cookie request #i.
+        Accept_VCR(server, pk(dskC), <cookie, request>) @ i
+      ==>
+          (Ex #j. Issue_wrapper(server, pk(dskC), <cookie>) @ j & j < i)
+        | (Ex #r. RevSk(server) @ r)
+        | (Ex #r. KU(dskC) @ r)
+  "
+
+/* VCR unforgeability: whenever the server accepts a VCR, then the client with the corresponding private key issued that VCR, or the adversary performed a long-term key reveal on the server, or the adversary knows the client's derived private key. */
+lemma VCR_unforgeability:
+  " All server dskC cookie request #i.
+        Accept_VCR(server, pk(dskC), <cookie, request>) @ i
+      ==>
+          (Ex #j. Issue_VCR(dskC, server, <cookie, request>) @ j & j < i)
+        | (Ex #r. RevSk(server) @ r)
+        | (Ex #r. KU(dskC) @ r)
+  "
+
+/* Replay resistance: the server will not accept a VCR for the same cookie and request combination more than once, unless the adversary knows the client's derived private key. */
+lemma replay_resistance:
+  " All server dskC cookie request #i #j.
+        Accept_VCR(server, pk(dskC), <cookie, request>) @ i &
+        Accept_VCR(server, pk(dskC), <cookie, request>) @ j
+      ==>
+          #i = #j
+        | (Ex #r. KU(dskC) @ r)
+  "
+
+/* Consistency check: the server can accept a VCR without the adversary having performed a long-term key reveal on the server or knowing the client's derived private key. */
+lemma accept_vcr_possible:
+  exists-trace
+  " Ex server dskC params #i.
+      Accept_VCR(server, pk(dskC), params) @ i
+    & not (Ex #r. RevSk(server) @ r)
+    & not (Ex #r. KU(dskC) @ r)
+  "
+
+end
