@@ -4,6 +4,8 @@ from fido2.hid import CtapHidDevice
 import hashlib
 import base64
 import json
+from pyudev import Context, Monitor, MonitorObserver
+import time
 
 def send_message(message):
     nm.send_message(nm.encode_message(message))
@@ -12,6 +14,26 @@ def int_to_unsigned_bytes(num):
     return (num).to_bytes(4, byteorder='big', signed=False)
 
 device = next(CtapHidDevice.list_devices(), None)
+plugged = False
+
+def register_device(d):
+    global plugged
+    global device
+    if d.action == 'add' and plugged == False:
+        while next(CtapHidDevice.list_devices(), None) == None:
+            time.sleep(0.1)
+        device = next(CtapHidDevice.list_devices())             
+        plugged = True
+    if d.action == 'remove' and plugged == True:
+        device = None
+        plugged = False
+
+context = Context()
+monitor = Monitor.from_netlink(context)
+monitor.filter_by(subsystem='usb')
+observer = MonitorObserver(monitor, callback=register_device, name='monitor-observer')
+observer.daemon
+observer.start()
 
 # # # Comment out below for the first time to generate
 # # # Master private key.

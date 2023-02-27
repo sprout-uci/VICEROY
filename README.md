@@ -21,7 +21,7 @@
 - Run `npm install` in the host directory.
 - To use Chrome native messaging:
   - With Solokey (see `viceroy-solo` for more information):
-    - Install necessary packages: `pip3 install fido2 nativemessaging`
+    - Install necessary packages: `pip3 install fido2 nativemessaging pyudev`
     - Run `install_host.sh solo` script in the `host` directory.
   - Without Solokey:
     - Run `install_host.sh nosolo` script in the `host` directory.
